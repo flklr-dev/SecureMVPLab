@@ -12,11 +12,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class RegistrationPresenter(private val context: Context) : AuthContract.RegistrationPresenter {
+class RegistrationPresenter(private val userRepository: UserRepository) : AuthContract.RegistrationPresenter {
     
     private var view: AuthContract.RegistrationView? = null
-    private val userRepository = UserRepository(context)
-    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + Job())
     
     override fun attachView(view: AuthContract.RegistrationView) {
         this.view = view
@@ -26,20 +25,20 @@ class RegistrationPresenter(private val context: Context) : AuthContract.Registr
         this.view = null
     }
     
-    override fun register(username: String, password: String, confirmPassword: String) {
+    override fun register(email: String, password: String, confirmPassword: String) {
         // Validate input first
-        if (!validateRegistrationInput(username, password, confirmPassword)) {
+        if (!validateRegistrationInput(email, password, confirmPassword)) {
             return
         }
         
         // Sanitize input
-        val sanitizedUsername = InputValidator.sanitizeInput(username)
+        val sanitizedEmail = InputValidator.sanitizeInput(email)
         
         // Show loading state
         view?.showLoading(true)
         
         coroutineScope.launch {
-            val result = userRepository.register(sanitizedUsername, password)
+            val result = userRepository.register(sanitizedEmail, password)
             
             withContext(Dispatchers.Main) {
                 view?.showLoading(false)
@@ -58,36 +57,26 @@ class RegistrationPresenter(private val context: Context) : AuthContract.Registr
     }
     
     override fun validateRegistrationInput(
-        username: String, 
-        password: String, 
+        email: String,
+        password: String,
         confirmPassword: String
     ): Boolean {
-        if (username.isBlank()) {
-            view?.showRegistrationError("Username cannot be empty")
+        if (email.isBlank()) {
+            view?.showRegistrationError("Email is required")
             return false
         }
-        
-        if (!InputValidator.isValidUsername(username)) {
-            view?.showRegistrationError("Username must be at least 4 characters and alphanumeric")
+        if (!InputValidator.isValidEmail(email)) {
+            view?.showRegistrationError("Please enter a valid email address")
             return false
         }
-        
         if (password.isBlank()) {
-            view?.showRegistrationError("Password cannot be empty")
+            view?.showRegistrationError("Password is required")
             return false
         }
-        
-        if (!SecurityUtils.isPasswordStrong(password)) {
-            val feedback = SecurityUtils.getPasswordStrengthFeedback(password)
-            view?.showPasswordStrengthFeedback(false, feedback)
-            return false
-        }
-        
-        if (!InputValidator.doPasswordsMatch(password, confirmPassword)) {
+        if (confirmPassword != password) {
             view?.showRegistrationError("Passwords do not match")
             return false
         }
-        
         return true
     }
     

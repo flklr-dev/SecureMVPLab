@@ -5,15 +5,16 @@ interface AuthContract {
     interface LoginView {
         fun showLoading(isLoading: Boolean)
         fun showLoginError(message: String)
-        fun navigateToMainScreen()
         fun showNetworkError(message: String)
+        fun navigateToMainScreen()
+        fun showLoginSuccess()
     }
     
     interface LoginPresenter {
         fun attachView(view: LoginView)
         fun detachView()
-        fun login(username: String, password: String)
-        fun validateCredentials(username: String, password: String): Boolean
+        fun login(email: String, password: String)
+        fun validateCredentials(email: String, password: String): Boolean
     }
     
     interface RegistrationView {
@@ -26,8 +27,8 @@ interface AuthContract {
     interface RegistrationPresenter {
         fun attachView(view: RegistrationView)
         fun detachView()
-        fun register(username: String, password: String, confirmPassword: String)
-        fun validateRegistrationInput(username: String, password: String, confirmPassword: String): Boolean
+        fun register(email: String, password: String, confirmPassword: String)
+        fun validateRegistrationInput(email: String, password: String, confirmPassword: String): Boolean
         fun checkPasswordStrength(password: String)
     }
 } 

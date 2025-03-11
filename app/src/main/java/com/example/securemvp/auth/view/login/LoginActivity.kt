@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,11 +42,17 @@ import com.example.securemvp.auth.view.registration.RegistrationActivity
 import com.example.securemvp.ui.theme.SecureMVPLabTheme
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import com.example.securemvp.ui.components.PasswordField
+import androidx.compose.ui.focus.FocusState
+import com.example.securemvp.utils.InputValidator
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.material3.AlertDialog
 
 class LoginActivity : ComponentActivity(), AuthContract.LoginView {
     
     private lateinit var presenter: LoginPresenter
     private val snackbarHostState = SnackbarHostState()
+    private var isLoginInProgress = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,8 +63,11 @@ class LoginActivity : ComponentActivity(), AuthContract.LoginView {
         setContent {
             SecureMVPLabTheme {
                 LoginScreen(
-                    onLoginClick = { username, password ->
-                        presenter.login(username, password)
+                    onLoginClick = { email, password ->
+                        if (!isLoginInProgress) {
+                            isLoginInProgress = true
+                            presenter.login(email, password)
+                        }
                     },
                     onRegisterClick = {
                         startActivity(Intent(this, RegistrationActivity::class.java))
@@ -74,26 +84,77 @@ class LoginActivity : ComponentActivity(), AuthContract.LoginView {
     }
     
     override fun showLoading(isLoading: Boolean) {
-        // Update loading state in the UI
-        runOnUiThread {
-            // The loading state is handled in the Composable
+        isLoginInProgress = isLoading
+        setContent {
+            SecureMVPLabTheme {
+                LoginScreen(
+                    onLoginClick = { email, password ->
+                        if (!isLoginInProgress) {
+                            isLoginInProgress = true
+                            presenter.login(email, password)
+                        }
+                    },
+                    onRegisterClick = {
+                        startActivity(Intent(this, RegistrationActivity::class.java))
+                    },
+                    snackbarHostState = snackbarHostState,
+                    isLoading = isLoading
+                )
+            }
         }
     }
     
     override fun showLoginError(message: String) {
+        isLoginInProgress = false
         lifecycleScope.launch {
-            snackbarHostState.showSnackbar(message)
+            setContent {
+                SecureMVPLabTheme {
+                    LoginScreen(
+                        onLoginClick = { email, password ->
+                            if (!isLoginInProgress) {
+                                isLoginInProgress = true
+                                presenter.login(email, password)
+                            }
+                        },
+                        onRegisterClick = {
+                            startActivity(Intent(this@LoginActivity, RegistrationActivity::class.java))
+                        },
+                        snackbarHostState = snackbarHostState,
+                        errorMessage = message
+                    )
+                }
+            }
         }
     }
     
     override fun showNetworkError(message: String) {
+        showLoginError("Network error: $message")
+    }
+    
+    override fun showLoginSuccess() {
+        isLoginInProgress = false
         lifecycleScope.launch {
-            snackbarHostState.showSnackbar(message)
+            setContent {
+                SecureMVPLabTheme {
+                    LoginScreen(
+                        onLoginClick = { _, _ -> },
+                        onRegisterClick = { },
+                        snackbarHostState = snackbarHostState,
+                        showSuccessDialog = true
+                    )
+                }
+            }
+            
+            // Navigate to main screen after delay
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!isFinishing) {
+                    navigateToMainScreen()
+                }
+            }, 2000)
         }
     }
     
     override fun navigateToMainScreen() {
-        // Navigate to main screen
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
@@ -103,80 +164,199 @@ class LoginActivity : ComponentActivity(), AuthContract.LoginView {
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
     onRegisterClick: () -> Unit,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    showSuccessDialog: Boolean = false,
+    errorMessage: String? = null,
+    isLoading: Boolean = false
 ) {
-    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
+    var localIsLoading by remember { mutableStateOf(isLoading) }
+    var currentErrorMessage by remember { mutableStateOf(errorMessage) }
+    var showSuccessDialogState by remember { mutableStateOf(showSuccessDialog) }
     
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Login",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Username") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                Button(
-                    onClick = { onLoginClick(username, password) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 8.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                    Text("Login")
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                TextButton(
-                    onClick = onRegisterClick,
-                    enabled = !isLoading
-                ) {
-                    Text("Don't have an account? Register")
+    // Add state for field validation
+    var hasEmailFocused by remember { mutableStateOf(false) }
+    var hasPasswordFocused by remember { mutableStateOf(false) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    
+    // Update local loading state when prop changes
+    LaunchedEffect(isLoading) {
+        localIsLoading = isLoading
+    }
+    
+    // Update error message when prop changes
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            currentErrorMessage = errorMessage
+            localIsLoading = false
+        }
+    }
+    
+    // Update success dialog state when prop changes
+    LaunchedEffect(showSuccessDialog) {
+        showSuccessDialogState = showSuccessDialog
+        if (showSuccessDialog) {
+            localIsLoading = false
+        }
+    }
+
+    // Show error dialog
+    currentErrorMessage?.let { error ->
+        AlertDialog(
+            onDismissRequest = { currentErrorMessage = null },
+            title = { Text("Login Failed") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { 
+                    currentErrorMessage = null
+                    localIsLoading = false
+                }) {
+                    Text("OK")
                 }
             }
+        )
+    }
+
+    // Show success dialog
+    if (showSuccessDialogState) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Welcome Back!") },
+            text = { Text("Login successful! Taking you to your dashboard...") },
+            confirmButton = { }
+        )
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Login",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+            
+            // Email field
+            OutlinedTextField(
+                value = email,
+                onValueChange = { 
+                    email = it
+                    emailError = validateEmail(it)
+                },
+                label = { Text("Email") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            hasEmailFocused = true
+                        }
+                        if (hasEmailFocused && !focusState.isFocused) {
+                            emailError = validateEmail(email)
+                        }
+                    },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                isError = emailError != null,
+                enabled = !localIsLoading
+            )
+            
+            emailError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(start = 4.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Password field
+            PasswordField(
+                value = password,
+                onValueChange = { 
+                    password = it
+                    if (hasPasswordFocused) {
+                        passwordError = validatePassword(it)
+                    }
+                },
+                label = "Password",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            hasPasswordFocused = true
+                        }
+                        if (hasPasswordFocused && !focusState.isFocused) {
+                            passwordError = validatePassword(password)
+                        }
+                    },
+                enabled = !localIsLoading
+            )
+            
+            passwordError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(start = 4.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Button(
+                onClick = {
+                    if (!localIsLoading) {
+                        localIsLoading = true
+                        onLoginClick(email, password)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !localIsLoading && emailError == null && passwordError == null &&
+                        email.isNotBlank() && password.isNotBlank()
+            ) {
+                Text(if (localIsLoading) "Logging in..." else "Login")
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            TextButton(
+                onClick = onRegisterClick,
+                enabled = !localIsLoading
+            ) {
+                Text("Don't have an account? Register")
+            }
         }
+    }
+}
+
+private fun validateEmail(email: String): String? {
+    return when {
+        email.isBlank() -> "Email is required"
+        !InputValidator.isValidEmail(email) -> "Please enter a valid email address"
+        else -> null
+    }
+}
+
+private fun validatePassword(password: String): String? {
+    return when {
+        password.isBlank() -> "Password is required"
+        else -> null
     }
 } 

@@ -29,6 +29,7 @@ abstract class SecureDatabase : RoomDatabase() {
                     "secure_database"
                 )
                 .openHelperFactory(factory)
+                .fallbackToDestructiveMigration()
                 .build()
                 
                 INSTANCE = instance

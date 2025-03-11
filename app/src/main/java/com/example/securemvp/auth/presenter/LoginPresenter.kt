@@ -16,63 +16,89 @@ class LoginPresenter(private val context: Context) : AuthContract.LoginPresenter
     private var view: AuthContract.LoginView? = null
     private val userRepository = UserRepository(context)
     private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
+    private var isLoginInProgress = false
     
     override fun attachView(view: AuthContract.LoginView) {
         this.view = view
     }
     
     override fun detachView() {
+        isLoginInProgress = false
         this.view = null
     }
     
-    override fun login(username: String, password: String) {
-        // Validate input first
-        if (!validateCredentials(username, password)) {
+    override fun login(email: String, password: String) {
+        if (isLoginInProgress) {
             return
         }
         
-        // Sanitize input
-        val sanitizedUsername = InputValidator.sanitizeInput(username)
+        if (!validateCredentials(email, password)) {
+            view?.showLoading(false)
+            return
+        }
         
-        // Show loading state
+        isLoginInProgress = true
+        val sanitizedEmail = InputValidator.sanitizeInput(email)
         view?.showLoading(true)
         
         coroutineScope.launch {
-            val result = userRepository.login(sanitizedUsername, password)
-            
-            withContext(Dispatchers.Main) {
-                view?.showLoading(false)
+            try {
+                val result = userRepository.login(sanitizedEmail, password)
                 
-                when (result) {
-                    is AuthResult.Success -> {
-                        view?.navigateToMainScreen()
-                    }
-                    is AuthResult.Error -> {
-                        if (result.message.contains("Network")) {
-                            view?.showNetworkError(result.message)
-                        } else {
-                            view?.showLoginError(result.message)
+                withContext(Dispatchers.Main) {
+                    isLoginInProgress = false
+                    
+                    when (result) {
+                        is AuthResult.Success -> {
+                            view?.showLoginSuccess()
+                        }
+                        is AuthResult.Error -> {
+                            view?.showLoading(false)
+                            when {
+                                result.message.contains("Account not found") -> 
+                                    view?.showLoginError("This account doesn't exist. Register an account first.")
+                                result.message.contains("Incorrect password") -> 
+                                    view?.showLoginError("Incorrect password. Please try again.")
+                                result.message.contains("Invalid credentials") -> 
+                                    view?.showLoginError("Invalid email or password. Please check your credentials.")
+                                result.message.contains("Network error") -> 
+                                    view?.showLoginError("Unable to connect. Please check your internet connection.")
+                                else -> view?.showLoginError(result.message)
+                            }
+                        }
+                        else -> {
+                            view?.showLoading(false)
                         }
                     }
-                    else -> {}
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isLoginInProgress = false
+                    view?.showLoading(false)
+                    view?.showLoginError("An unexpected error occurred. Please try again.")
                 }
             }
         }
     }
     
-    override fun validateCredentials(username: String, password: String): Boolean {
-        if (username.isBlank()) {
-            view?.showLoginError("Username cannot be empty")
+    override fun validateCredentials(email: String, password: String): Boolean {
+        if (email.isBlank()) {
+            view?.showLoginError("Email is required")
+            return false
+        }
+        
+        if (!InputValidator.isValidEmail(email)) {
+            view?.showLoginError("Please enter a valid email address")
             return false
         }
         
         if (password.isBlank()) {
-            view?.showLoginError("Password cannot be empty")
+            view?.showLoginError("Password is required")
             return false
         }
-        
-        if (!InputValidator.isValidUsername(username)) {
-            view?.showLoginError("Invalid username format")
+
+        if (password.length < 8) {
+            view?.showLoginError("Password must be at least 8 characters long")
             return false
         }
         

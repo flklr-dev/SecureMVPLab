@@ -16,70 +16,58 @@ class UserRepository(private val context: Context) {
     private val securePrefs = SecureSharedPreferences(context)
     private val apiService = ApiClient.createApiService(context)
     
-    suspend fun login(username: String, password: String): AuthResult {
+    suspend fun login(email: String, password: String): AuthResult {
         return withContext(Dispatchers.IO) {
             try {
-                // First try local authentication
-                if (securePrefs.isUserRegistered(username)) {
-                    val saltString = securePrefs.getUserSalt(username)
-                    val storedHash = securePrefs.getUserPasswordHash(username)
-                    
-                    if (saltString != null && storedHash != null) {
-                        val salt = Base64.getDecoder().decode(saltString)
-                        val isValid = SecurityUtils.verifyPassword(password, salt, storedHash)
-                        
-                        if (isValid) {
-                            // Local authentication successful
-                            return@withContext AuthResult.Success(
-                                User(
-                                    id = "local_user",
-                                    username = username,
-                                    passwordHash = storedHash,
-                                    salt = saltString
-                                )
-                            )
-                        }
-                    }
+                // Check if user exists
+                if (!securePrefs.isUserRegistered(email)) {
+                    return@withContext AuthResult.Error("Account not found. Please register first.")
+                }
+
+                // Get stored password hash and salt
+                val storedSalt = securePrefs.getUserSalt(email) ?: return@withContext AuthResult.Error(
+                    "Invalid credentials. Please try again."
+                )
+                val storedHash = securePrefs.getUserPasswordHash(email) ?: return@withContext AuthResult.Error(
+                    "Invalid credentials. Please try again."
+                )
+
+                // Hash the provided password with stored salt
+                val salt = Base64.getDecoder().decode(storedSalt)
+                val passwordHash = SecurityUtils.hashPassword(password, salt)
+
+                // Compare password hashes
+                if (passwordHash != storedHash) {
+                    return@withContext AuthResult.Error("Incorrect password. Please try again.")
                 }
                 
-                // If local authentication fails or user not found locally, try remote
-                val response = apiService.login(ApiService.LoginRequest(username, password))
-                
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val user = response.body()?.user
-                    if (user != null) {
-                        // Save user credentials locally for future offline authentication
-                        val salt = SecurityUtils.generateSalt()
-                        val saltString = Base64.getEncoder().encodeToString(salt)
-                        val passwordHash = SecurityUtils.hashPassword(password, salt)
-                        
-                        securePrefs.saveUserCredentials(
-                            username = username,
-                            passwordHash = passwordHash,
-                            salt = saltString
-                        )
-                        
-                        return@withContext AuthResult.Success(user)
-                    }
-                }
-                
-                return@withContext AuthResult.Error(response.body()?.message ?: "Authentication failed")
+                // Set current user
+                securePrefs.setCurrentUser(email)
+
+                return@withContext AuthResult.Success(
+                    User(
+                        id = "local_user",
+                        email = email,
+                        passwordHash = passwordHash,
+                        salt = storedSalt
+                    )
+                )
             } catch (e: Exception) {
-                return@withContext AuthResult.Error("Network error: ${e.message}")
+                return@withContext AuthResult.Error("Network error: Please check your connection.")
             }
         }
     }
     
-    suspend fun register(username: String, password: String): AuthResult {
+    suspend fun register(email: String, password: String): AuthResult {
         return withContext(Dispatchers.IO) {
             try {
                 // Check if user already exists locally
-                if (securePrefs.isUserRegistered(username)) {
+                if (securePrefs.isUserRegistered(email)) {
                     return@withContext AuthResult.Error("User already exists")
                 }
                 
                 // Try to register with remote API
-                val response = apiService.register(ApiService.RegisterRequest(username, password))
+                val response = apiService.register(ApiService.RegisterRequest(email, password))
                 
                 if (response.isSuccessful && response.body()?.success == true) {
                     // Save user credentials locally
@@ -88,7 +76,7 @@ class UserRepository(private val context: Context) {
                     val passwordHash = SecurityUtils.hashPassword(password, salt)
                     
                     securePrefs.saveUserCredentials(
-                        username = username,
+                        email = email,
                         passwordHash = passwordHash,
                         salt = saltString
                     )
@@ -96,7 +84,7 @@ class UserRepository(private val context: Context) {
                     return@withContext AuthResult.Success(
                         User(
                             id = "local_user",
-                            username = username,
+                            email = email,
                             passwordHash = passwordHash,
                             salt = saltString
                         )
@@ -105,30 +93,14 @@ class UserRepository(private val context: Context) {
                 
                 return@withContext AuthResult.Error(response.body()?.message ?: "Registration failed")
             } catch (e: Exception) {
-                // If network is unavailable, register locally only
-                val salt = SecurityUtils.generateSalt()
-                val saltString = Base64.getEncoder().encodeToString(salt)
-                val passwordHash = SecurityUtils.hashPassword(password, salt)
-                
-                securePrefs.saveUserCredentials(
-                    username = username,
-                    passwordHash = passwordHash,
-                    salt = saltString
-                )
-                
-                return@withContext AuthResult.Success(
-                    User(
-                        id = "local_user",
-                        username = username,
-                        passwordHash = passwordHash,
-                        salt = saltString
-                    )
-                )
+                return@withContext AuthResult.Error("Network error: ${e.message}")
             }
         }
     }
     
     fun logout() {
-        securePrefs.clearUserData()
+        securePrefs.logout()
     }
+
+
 } 

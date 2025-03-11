@@ -10,9 +10,10 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity)
     
-    @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
-    suspend fun getUserByUsername(username: String): UserEntity?
+    @Query("SELECT * FROM users WHERE email = :email LIMIT 1")
+    suspend fun getUserByEmail(email: String): UserEntity?
     
-    @Query("DELETE FROM users WHERE username = :username")
-    suspend fun deleteUser(username: String)
+    
+    @Query("DELETE FROM users WHERE email = :email")
+    suspend fun deleteUser(email: String)
 } 

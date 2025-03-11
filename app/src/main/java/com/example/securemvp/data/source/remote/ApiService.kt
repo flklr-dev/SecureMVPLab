@@ -13,9 +13,12 @@ interface ApiService {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): retrofit2.Response<RegisterResponse>
     
-    data class LoginRequest(val username: String, val password: String)
+    data class LoginRequest(val email: String, val password: String)
     data class LoginResponse(val success: Boolean, val message: String, val user: User?)
     
-    data class RegisterRequest(val username: String, val password: String)
+    data class RegisterRequest(
+        val email: String,
+        val password: String
+    )
     data class RegisterResponse(val success: Boolean, val message: String)
 } 

@@ -1,6 +1,9 @@
 package com.example.securemvp.utils
 
+import android.accounts.Account
+import android.accounts.AccountManager
 import android.content.Context
+import android.os.Bundle
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -17,6 +20,7 @@ object SecurityUtils {
     private const val ITERATIONS = 10000
     private const val KEY_LENGTH = 256
     private const val SALT_LENGTH = 16
+    private const val ACCOUNT_TYPE = "com.example.securemvp"
     
     // Password strength regex patterns
     private val PASSWORD_PATTERN = Pattern.compile(
@@ -29,6 +33,63 @@ object SecurityUtils {
         ".{8,}" +               // at least 8 characters
         "$"
     )
+    
+    // Account Manager Integration
+    fun addAccount(context: Context, email: String, password: String, salt: String): Boolean {
+        try {
+            val accountManager = AccountManager.get(context)
+            val account = Account(email, ACCOUNT_TYPE)
+            
+            // Add the account
+            val success = accountManager.addAccountExplicitly(account, password, Bundle().apply {
+                putString("salt", salt)
+            })
+            
+            if (success) {
+                // Store additional user data if needed
+                accountManager.setUserData(account, "created_at", System.currentTimeMillis().toString())
+                accountManager.setUserData(account, "last_login", System.currentTimeMillis().toString())
+            }
+            
+            return success
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+
+    fun getAccount(context: Context, email: String): Account? {
+        val accountManager = AccountManager.get(context)
+        return accountManager.getAccountsByType(ACCOUNT_TYPE)
+            .firstOrNull { it.name == email }
+    }
+
+    fun removeAccount(context: Context, email: String) {
+        val accountManager = AccountManager.get(context)
+        getAccount(context, email)?.let { account ->
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
+                accountManager.removeAccount(account, null, null, null)
+            } else {
+                @Suppress("DEPRECATION")
+                accountManager.removeAccount(account, null, null)
+            }
+        }
+    }
+
+    fun updatePassword(context: Context, email: String, newPassword: String) {
+        val accountManager = AccountManager.get(context)
+        getAccount(context, email)?.let { account ->
+            accountManager.setPassword(account, newPassword)
+            accountManager.setUserData(account, "last_password_change", System.currentTimeMillis().toString())
+        }
+    }
+
+    fun getAccountSalt(context: Context, email: String): String? {
+        val accountManager = AccountManager.get(context)
+        return getAccount(context, email)?.let { account ->
+            accountManager.getUserData(account, "salt")
+        }
+    }
     
     // Generate a random salt
     fun generateSalt(): ByteArray {
