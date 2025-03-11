@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">example.com</domain>
+        <!-- Add your pinset for certificate pinning -->
+        <pin-set>
+            <!-- Example pin - replace with your actual certificate pin -->
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config> 
